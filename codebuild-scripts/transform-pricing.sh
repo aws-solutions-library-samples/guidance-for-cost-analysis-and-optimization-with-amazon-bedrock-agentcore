@@ -3,9 +3,16 @@ set -euo pipefail
 
 echo "=== Transformation Script: Clone and Transform Pricing MCP Server ==="
 
-# Clone upstream repository
-echo "Cloning upstream MCP repository..."
-git clone --depth 1 https://github.com/awslabs/mcp.git
+# Clone upstream repository, pinned to a known-good commit.
+# Upstream HEAD breaks these transforms: awslabs/mcp 1ea49904 (billing) and
+# 13b13095 (pricing). 8ddc0294 is the last commit before either break.
+# Override with MCP_COMMIT=<sha> if you deliberately move to a newer upstream.
+MCP_COMMIT="${MCP_COMMIT:-8ddc029465d25cb043f810310a98ecbd639e9ca2}"
+echo "Fetching upstream MCP repository at ${MCP_COMMIT}..."
+git init -q mcp
+git -C mcp remote add origin https://github.com/awslabs/mcp.git
+git -C mcp fetch -q --depth 1 origin "$MCP_COMMIT"
+git -C mcp checkout -q FETCH_HEAD
 cd mcp/src/aws-pricing-mcp-server
 
 SERVER_FILE="awslabs/aws_pricing_mcp_server/server.py"

@@ -157,6 +157,18 @@ chmod +x scripts/deploy.sh
 - Supports macOS, Linux, and Windows (WSL/Git Bash)
 - Requires AWS CLI configured with appropriate credentials
 
+**Next step — deploy the frontend (manual):**
+
+The `deploy.sh` script deploys the five backend CloudFormation stacks only. The AWS Amplify frontend is not part of the automated script and must be deployed manually afterward:
+
+1. Download `AWS-Amplify-Frontend.zip` from the `amplify-frontend/` directory in this repository.
+2. Open the [AWS Amplify console](https://console.aws.amazon.com/amplify/).
+3. Choose **Deploy without Git provider**.
+4. Upload the `.zip` file and wait for deployment to complete.
+5. Note the generated domain URL.
+
+Then open the Amplify application URL and enter the Cognito and AgentCore values from the stack outputs the script displayed (see [Configure the frontend](#configure-the-frontend)). This step is identical to [Step 8](#step-8-deploy-the-amplify-frontend) of the Manual Deployment section.
+
 For a detailed understanding of each deployment step, see the [Manual Deployment](#manual-deployment) section below.
 
 ## Manual Deployment
