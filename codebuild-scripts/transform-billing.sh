@@ -3,9 +3,16 @@ set -euo pipefail
 
 echo "=== Transformation Script: Clone and Transform Billing MCP Server ==="
 
-# Clone upstream repository
-echo "Cloning upstream MCP repository..."
-git clone --depth 1 https://github.com/awslabs/mcp.git
+# Clone upstream repository, pinned to a known-good commit.
+# Upstream HEAD breaks these transforms: awslabs/mcp 1ea49904 (billing) and
+# 13b13095 (pricing). 8ddc0294 is the last commit before either break.
+# Override with MCP_COMMIT=<sha> if you deliberately move to a newer upstream.
+MCP_COMMIT="${MCP_COMMIT:-8ddc029465d25cb043f810310a98ecbd639e9ca2}"
+echo "Fetching upstream MCP repository at ${MCP_COMMIT}..."
+git init -q mcp
+git -C mcp remote add origin https://github.com/awslabs/mcp.git
+git -C mcp fetch -q --depth 1 origin "$MCP_COMMIT"
+git -C mcp checkout -q FETCH_HEAD
 cd mcp/src/billing-cost-management-mcp-server
 
 SERVER_FILE="awslabs/billing_cost_management_mcp_server/server.py"
@@ -63,11 +70,30 @@ echo "server.py transformation verified."
 # No need to add uvicorn/starlette — fastmcp handles streamable-http transport internally
 echo "Dependencies: fastmcp handles streamable-http transport natively."
 
+# Keep billing on its declared fastmcp 3.x (its source imports fastmcp.tools.ToolResult,
+# a 3.x-only symbol, so it CANNOT run on fastmcp 2.x). fastmcp 3.x turns on a
+# DNS-rebinding Host/Origin guard by default, which rejects the AgentCore Gateway's
+# cross-host request (Host: bedrock-agentcore.<region>.amazonaws.com) with HTTP 421.
+# We disable that guard via the container env var below rather than downgrading.
+
 # Disable UV_FROZEN in Dockerfile
 echo "Disabling UV_FROZEN in Dockerfile..."
 sed -i 's/UV_FROZEN=1/UV_FROZEN=0/g' Dockerfile
 sed -i '/ENV UV_FROZEN/d' Dockerfile
 echo "UV_FROZEN handling complete."
+
+# Disable fastmcp 3.x's DNS-rebinding Host/Origin protection so the AgentCore
+# Gateway (which connects with Host: bedrock-agentcore.<region>.amazonaws.com,
+# not localhost) is not rejected with HTTP 421 Misdirected Request. fastmcp reads
+# FASTMCP_HTTP_HOST_ORIGIN_PROTECTION from the env (settings.http_host_origin_protection,
+# default True); the streamable-http transport passes it through as
+# host_origin_protection. Safe here: the runtime is reachable only behind the
+# authenticated AgentCore Gateway, not a browser-facing public endpoint.
+echo "Disabling fastmcp Host/Origin protection via Dockerfile ENV..."
+grep -q 'FASTMCP_HTTP_HOST_ORIGIN_PROTECTION' Dockerfile || \
+    sed -i '/^HEALTHCHECK/i ENV FASTMCP_HTTP_HOST_ORIGIN_PROTECTION=false' Dockerfile
+grep -q 'FASTMCP_HTTP_HOST_ORIGIN_PROTECTION=false' Dockerfile || { echo "ERROR: FASTMCP_HTTP_HOST_ORIGIN_PROTECTION not set in Dockerfile"; exit 1; }
+echo "Host/Origin protection disabled in Dockerfile."
 
 # Transform Dockerfile: add EXPOSE and update entrypoint
 echo "Transforming Dockerfile..."
